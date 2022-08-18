@@ -8,7 +8,7 @@ local settings = require('femaco.config').settings
 local M = {}
 
 local is_code_block = function(node)
-  return node:type() == 'ranged_tag_content'
+  return node:type() == 'ranged_tag' -- 'fenced_code_block'
 end
 
 local get_code_block_node_at_cursor = function()
@@ -25,22 +25,22 @@ end
 
 local get_lang = function(fenced_code_block)
   local info_string = fenced_code_block:named_child(1)
-  if info_string:type() ~= 'info_string' then
+  if info_string:type() ~= 'tag_parameters' then
     return nil
   end
   local lang = info_string:named_child(0)
-  if lang:type() ~= 'language' then
+  if lang:type() ~= 'tag_param' then
     return nil
   end
   return ts.get_node_text(lang, 0)
 end
 
 local get_content = function(fenced_code_block)
-  local content = fenced_code_block:named_child(3)
+  local content = fenced_code_block:named_child(2)
   if content == nil then
     return ''
   end
-  if content:type() ~= 'code_fence_content' then
+  if content:type() ~= 'ranged_tag_content' then
     return ''
   end
   return ts.get_node_text(content, 0)
@@ -53,10 +53,11 @@ local get_code_block_at_cursor = function()
   end
 
   local start_row, _, end_row, _ = ts_utils.get_node_range(fenced_code_block)
+    local lines = vim.split(get_content(fenced_code_block), '\n')
   return {
     start_row = start_row,
     end_row = end_row,
-    lines = vim.split(get_content(fenced_code_block), '\n'),
+    lines = lines,
     lang = get_lang(fenced_code_block),
   }
 end
