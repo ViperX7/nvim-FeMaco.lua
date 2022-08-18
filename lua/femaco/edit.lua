@@ -23,27 +23,23 @@ local get_code_block_node_at_cursor = function()
   return node
 end
 
+local get_node_info = function(node)
+  local neorg = require("neorg")
+  local treesitter = neorg.modules.get_module("core.integrations.treesitter")
+  return treesitter.get_tag_info(node)
+end
+
 local get_lang = function(fenced_code_block)
-  local info_string = fenced_code_block:named_child(1)
-  if info_string:type() ~= 'tag_parameters' then
-    return nil
-  end
-  local lang = info_string:named_child(0)
-  if lang:type() ~= 'tag_param' then
-    return nil
-  end
-  return ts.get_node_text(lang, 0)
+  local code_info = get_node_info(fenced_code_block)
+  local lang = code_info.parameters[1]
+  return lang
 end
 
 local get_content = function(fenced_code_block)
-  local content = fenced_code_block:named_child(2)
-  if content == nil then
-    return ''
-  end
-  if content:type() ~= 'ranged_tag_content' then
-    return ''
-  end
-  return ts.get_node_text(content, 0)
+  local code_info = get_node_info(fenced_code_block)
+  local lang = code_info.parameters[1]
+  local lines = code_info.content
+  return lines
 end
 
 local get_code_block_at_cursor = function()
@@ -52,12 +48,13 @@ local get_code_block_at_cursor = function()
     return nil
   end
 
-  local start_row, _, end_row, _ = ts_utils.get_node_range(fenced_code_block)
-    local lines = vim.split(get_content(fenced_code_block), '\n')
+  local start_row, start_column, end_row, end_column = ts_utils.get_node_range(fenced_code_block)
   return {
     start_row = start_row,
+    start_column = start_column,
     end_row = end_row,
-    lines = lines,
+    end_column = end_column,
+    lines = get_content(fenced_code_block),
     lang = get_lang(fenced_code_block),
   }
 end
@@ -79,20 +76,25 @@ local clear_extmarks = function()
   end
 end
 
-local make_extmarks = function(start_row, end_row)
+local make_extmarks = function(start_row, start_column, end_row, end_column)
   local ns_id = get_ns_id()
   clear_extmarks()
   return {
-    start = vim.api.nvim_buf_set_extmark(0, ns_id, start_row, 0, {}),
-    end_ = vim.api.nvim_buf_set_extmark(0, ns_id, end_row, 0, {}),
+    start = vim.api.nvim_buf_set_extmark(0, ns_id, start_row, start_column, {}),
+    end_ = vim.api.nvim_buf_set_extmark(0, ns_id, end_row, end_column, {}),
   }
 end
 
 local set_extmarks_lines = function(bufnr, lines, extmarks)
   local ns_id = get_ns_id()
-  local start_row = vim.api.nvim_buf_get_extmark_by_id(bufnr, ns_id, extmarks.start, {})[1]
-  local end_row = vim.api.nvim_buf_get_extmark_by_id(bufnr, ns_id, extmarks.end_, {})[1]
-  vim.api.nvim_buf_set_lines(bufnr, start_row + 1, end_row - 1, true, lines)
+  local start_row = vim.api.nvim_buf_get_extmark_by_id(bufnr, ns_id, extmarks.start, {})
+  local end_row = vim.api.nvim_buf_get_extmark_by_id(bufnr, ns_id, extmarks.end_, {})
+
+  for i, line in ipairs(lines) do
+      lines[i] = string.rep(" ", start_row[2]) .. line
+  end
+
+  vim.api.nvim_buf_set_lines(bufnr, start_row[1] + 1, end_row[1] , true, lines)
 end
 
 local tbl_equal = function(t1, t2)
@@ -114,7 +116,11 @@ M.edit_code_block = function()
     return
   end
   local cursor_row, cursor_col = unpack(vim.api.nvim_win_get_cursor(0))
-  local extmarks = make_extmarks(code_block.start_row, code_block.end_row)
+  local extmarks = make_extmarks(
+    code_block.start_row,
+    code_block.start_column,
+    code_block.end_row,
+    code_block.end_column)
   open_float(settings.float_opts(code_block))
 
   vim.cmd('file ' .. os.tmpname())
