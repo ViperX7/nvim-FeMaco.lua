@@ -8,7 +8,7 @@ local settings = require('femaco.config').settings
 local M = {}
 
 local is_code_block = function(node)
-  return node:type() == 'fenced_code_block'
+  return node:type() == 'ranged_tag_content'
 end
 
 local get_code_block_node_at_cursor = function()
